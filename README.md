@@ -1,16 +1,25 @@
 # VibeGo
 
-Control Claude Code on your Mac from your phone over local WiFi.
+Control Claude Code and Codex CLI on your Mac from your phone over local WiFi.
+
+## Supported CLI Tools
+
+| Tool | Notifications |
+|------|---------------|
+| **Claude Code** | Questions, permissions, task completion |
+| **Codex CLI** | Task completion only* |
+
+*Codex CLI currently only fires `agent-turn-complete` events. Question/permission notifications are not yet supported by Codex.
 
 ## How It Works
 
 ```
-Phone (Termius) ──SSH──> Mac (tmux + Claude Code)
+Phone (Termius) ──SSH──> Mac (tmux + Claude/Codex)
                                 │
 Phone (ntfy) <────────── notification hooks (tap to open Termius)
 ```
 
-SSH into your Mac, auto-attach to a persistent tmux session, and get push notifications when Claude needs input.
+SSH into your Mac, auto-attach to a persistent tmux session, and get push notifications when the AI needs input or finishes.
 
 ## Quick Start
 
@@ -22,7 +31,7 @@ cd vibego
 ./setup.sh
 ```
 
-The script installs dependencies (tmux, jq), configures Claude Code hooks, and sets up tmux auto-attach for SSH sessions.
+The script installs dependencies (tmux, jq), configures notification hooks for your CLI tools (Claude Code and/or Codex), and sets up tmux auto-attach for SSH sessions.
 
 **Required:** Enable Remote Login in System Settings → General → Sharing.
 
@@ -41,19 +50,23 @@ The script installs dependencies (tmux, jq), configures Claude Code hooks, and s
 
 4. **Test:**
    - SSH into your Mac → auto-attaches to tmux
-   - Run `claude` in any project
-   - Get notification when Claude needs input
+   - Run `claude` or `codex` in any project
+   - Get notification when the AI needs input or finishes
    - **Tap notification → opens Termius directly**
 
 ## Notifications
 
-Three types of notifications:
-
+### Claude Code
 | Event | When |
 |-------|------|
 | **Question** | Claude asks you something |
 | **Permission** | Claude needs approval to run a tool |
-| **Idle** | Claude finished and is waiting |
+| **Task Complete** | Claude finished and is waiting |
+
+### Codex CLI
+| Event | When |
+|-------|------|
+| **Task Complete** | Codex finished a task |
 
 Notifications show the project path and tmux window:
 - `[ACTIVE] Dev/MyProject: ...` — you're viewing this window
@@ -62,7 +75,7 @@ Notifications show the project path and tmux window:
 
 ## Multiple Sessions
 
-Create multiple Claude Code sessions in tmux windows:
+Create multiple AI coding sessions in tmux windows:
 
 | Action | Keys |
 |--------|------|
