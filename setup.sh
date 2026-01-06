@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # VibeGo Setup Script v1.0.0
-# Automates Mac setup for mobile Claude Code control via SSH
+# Automates Mac setup for mobile Claude Code and Codex CLI control via SSH
 #
 # Usage: ./setup.sh
 #
@@ -20,12 +20,20 @@ DEFAULT_NTFY_TOPIC="vibego-$(whoami)"
 DEFAULT_TMUX_SESSION="mobile"
 HOMEBREW_PACKAGES=("tmux" "jq")
 
-# Paths
+# Claude Code paths
 CLAUDE_DIR="$HOME/.claude"
-HOOKS_DIR="$CLAUDE_DIR/hooks"
-SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-NOTIFY_SCRIPT="$HOOKS_DIR/notify.sh"
-NOTIFY_IDLE_SCRIPT="$HOOKS_DIR/notify-idle.sh"
+CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
+CLAUDE_SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+CLAUDE_NOTIFY_SCRIPT="$CLAUDE_HOOKS_DIR/notify.sh"
+CLAUDE_NOTIFY_IDLE_SCRIPT="$CLAUDE_HOOKS_DIR/notify-idle.sh"
+
+# Codex CLI paths
+CODEX_DIR="$HOME/.codex"
+CODEX_HOOKS_DIR="$CODEX_DIR/hooks"
+CODEX_CONFIG_FILE="$CODEX_DIR/config.toml"
+CODEX_NOTIFY_SCRIPT="$CODEX_HOOKS_DIR/notify.sh"
+
+# Shell config paths
 ZSHRC="$HOME/.zshrc"
 ZSHENV="$HOME/.zshenv"
 SSH_DIR="$HOME/.ssh"
@@ -51,6 +59,8 @@ SYMBOL_INFO="ℹ"
 
 # Global state
 CREATED_BACKUPS=()
+SETUP_CLAUDE=false
+SETUP_CODEX=false
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -67,7 +77,7 @@ __     __ _  _            ____
 
 EOF
     echo -e "${COLOR_RESET}${COLOR_BOLD}VibeGo Setup v${VIBEGO_VERSION}${COLOR_RESET}"
-    echo -e "${COLOR_CYAN}Control Claude Code from your phone${COLOR_RESET}"
+    echo -e "${COLOR_CYAN}Control Claude Code & Codex CLI from your phone${COLOR_RESET}"
     echo
 }
 
@@ -232,6 +242,76 @@ check_remote_login() {
     fi
 }
 
+# ============================================================================
+# CLI DETECTION FUNCTIONS
+# ============================================================================
+
+check_claude_installed() {
+    command -v claude &>/dev/null
+}
+
+check_codex_installed() {
+    command -v codex &>/dev/null
+}
+
+select_cli_tools() {
+    print_step "Detecting installed CLI tools..."
+
+    local claude_available=false
+    local codex_available=false
+
+    if check_claude_installed; then
+        claude_available=true
+        print_success "Claude Code detected"
+    else
+        print_info "Claude Code not installed"
+    fi
+
+    if check_codex_installed; then
+        codex_available=true
+        print_success "Codex CLI detected"
+    else
+        print_info "Codex CLI not installed"
+    fi
+
+    echo
+
+    # If neither installed, warn and exit
+    if [[ "$claude_available" == false && "$codex_available" == false ]]; then
+        print_error "No supported CLI tools found"
+        print_info "Install Claude Code: npm install -g @anthropic-ai/claude-code"
+        print_info "Install Codex CLI: npm install -g @openai/codex"
+        return 1
+    fi
+
+    print_step "Select CLI tools to configure"
+    echo
+
+    # Ask about each available CLI
+    if [[ "$claude_available" == true ]]; then
+        if ask_yes_no "Configure Claude Code notifications?" "y"; then
+            SETUP_CLAUDE=true
+        fi
+    fi
+
+    if [[ "$codex_available" == true ]]; then
+        if ask_yes_no "Configure Codex CLI notifications?" "y"; then
+            SETUP_CODEX=true
+        fi
+    fi
+
+    # Ensure at least one was selected
+    if [[ "$SETUP_CLAUDE" == false && "$SETUP_CODEX" == false ]]; then
+        print_warning "No CLI tools selected for configuration"
+        if ! ask_yes_no "Continue anyway?" "n"; then
+            return 1
+        fi
+    fi
+
+    echo
+    return 0
+}
+
 preflight_checks() {
     print_step "Running preflight checks..."
 
@@ -325,28 +405,28 @@ install_dependencies() {
     return 0
 }
 
-create_hooks_dir() {
-    if [[ -d "$HOOKS_DIR" ]]; then
-        print_success "Hooks directory already exists"
+create_claude_hooks_dir() {
+    if [[ -d "$CLAUDE_HOOKS_DIR" ]]; then
+        print_success "Claude hooks directory already exists"
         return 0
     fi
 
-    mkdir -p "$HOOKS_DIR"
-    print_success "Created hooks directory"
+    mkdir -p "$CLAUDE_HOOKS_DIR"
+    print_success "Created Claude hooks directory"
 }
 
-install_notify_script() {
+install_claude_notify_script() {
     local ntfy_topic="$1"
 
-    print_step "Installing notification script..."
+    print_step "Installing Claude notification script..."
 
     # Backup existing notify.sh if present
-    if [[ -f "$NOTIFY_SCRIPT" ]]; then
-        backup_file "$NOTIFY_SCRIPT"
+    if [[ -f "$CLAUDE_NOTIFY_SCRIPT" ]]; then
+        backup_file "$CLAUDE_NOTIFY_SCRIPT"
     fi
 
     # Create notify.sh
-    cat > "$NOTIFY_SCRIPT" << 'OUTER_EOF'
+    cat > "$CLAUDE_NOTIFY_SCRIPT" << 'OUTER_EOF'
 #!/bin/bash
 # Send push notification via ntfy.sh when Claude asks a question
 
@@ -388,7 +468,7 @@ fi
 OUTER_EOF
 
     # Append the curl command with the topic substituted
-    cat >> "$NOTIFY_SCRIPT" << EOF
+    cat >> "$CLAUDE_NOTIFY_SCRIPT" << EOF
 curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
   -H "Title: Claude Code" \\
   -H "Priority: high" \\
@@ -397,22 +477,22 @@ curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
   -d "\${IS_ACTIVE}\${WINDOW_INFO}\${PROJECT}: \$QUESTION"
 EOF
 
-    chmod +x "$NOTIFY_SCRIPT"
+    chmod +x "$CLAUDE_NOTIFY_SCRIPT"
     print_success "Created notification script with topic: $ntfy_topic"
 }
 
-install_notify_idle_script() {
+install_claude_notify_idle_script() {
     local ntfy_topic="$1"
 
-    print_step "Installing idle/permission notification script..."
+    print_step "Installing Claude idle/permission notification script..."
 
     # Backup existing notify-idle.sh if present
-    if [[ -f "$NOTIFY_IDLE_SCRIPT" ]]; then
-        backup_file "$NOTIFY_IDLE_SCRIPT"
+    if [[ -f "$CLAUDE_NOTIFY_IDLE_SCRIPT" ]]; then
+        backup_file "$CLAUDE_NOTIFY_IDLE_SCRIPT"
     fi
 
     # Create notify-idle.sh
-    cat > "$NOTIFY_IDLE_SCRIPT" << 'OUTER_EOF'
+    cat > "$CLAUDE_NOTIFY_IDLE_SCRIPT" << 'OUTER_EOF'
 #!/bin/bash
 # Send push notification via ntfy.sh when Claude is done or needs permission
 
@@ -472,7 +552,7 @@ fi
 OUTER_EOF
 
     # Append the curl command with the topic substituted
-    cat >> "$NOTIFY_IDLE_SCRIPT" << EOF
+    cat >> "$CLAUDE_NOTIFY_IDLE_SCRIPT" << EOF
 curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
   -H "Title: \$TITLE" \\
   -H "Priority: \$PRIORITY" \\
@@ -481,8 +561,146 @@ curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
   -d "\${IS_ACTIVE}\${WINDOW_INFO}\${PROJECT}: \$MESSAGE"
 EOF
 
-    chmod +x "$NOTIFY_IDLE_SCRIPT"
+    chmod +x "$CLAUDE_NOTIFY_IDLE_SCRIPT"
     print_success "Created idle/permission notification script"
+}
+
+# ============================================================================
+# CODEX CLI INSTALLATION FUNCTIONS
+# ============================================================================
+
+create_codex_hooks_dir() {
+    if [[ -d "$CODEX_HOOKS_DIR" ]]; then
+        print_success "Codex hooks directory already exists"
+        return 0
+    fi
+
+    mkdir -p "$CODEX_HOOKS_DIR"
+    print_success "Created Codex hooks directory"
+}
+
+install_codex_notify_script() {
+    local ntfy_topic="$1"
+
+    print_step "Installing Codex notification script..."
+
+    # Backup existing script if present
+    if [[ -f "$CODEX_NOTIFY_SCRIPT" ]]; then
+        backup_file "$CODEX_NOTIFY_SCRIPT"
+    fi
+
+    # Create notify.sh for Codex
+    # Note: Codex passes JSON as command-line argument $1, not stdin
+    cat > "$CODEX_NOTIFY_SCRIPT" << 'OUTER_EOF'
+#!/bin/bash
+# VibeGo: Send push notification via ntfy.sh for Codex CLI
+# Codex passes JSON as command-line argument (not stdin like Claude)
+
+EVENT_DATA="$1"
+
+# Parse event data from JSON argument
+EVENT_TYPE=$(echo "$EVENT_DATA" | jq -r '.type // "unknown"')
+CWD=$(echo "$EVENT_DATA" | jq -r '.cwd // "."')
+# Truncate message to avoid overly long notifications
+MESSAGE=$(echo "$EVENT_DATA" | jq -r '."last-assistant-message" // "Codex finished"' | head -c 200)
+
+# Show last 2 path components for better session identification
+PROJECT=$(echo "$CWD" | rev | cut -d'/' -f1-2 | rev)
+
+# Get tmux window info for multi-session awareness
+WINDOW_INFO=""
+IS_ACTIVE=""
+if [ -n "$TMUX_PANE" ]; then
+  WINDOW_INDEX=$(tmux display-message -p '#{window_index}' 2>/dev/null)
+  CLIENT=$(tmux list-clients -F '#{client_name}' 2>/dev/null | head -1)
+  if [ -n "$CLIENT" ]; then
+    CLIENT_PANE=$(tmux display-message -t "$CLIENT" -p '#{pane_id}' 2>/dev/null)
+    if [ "$TMUX_PANE" = "$CLIENT_PANE" ]; then
+      IS_ACTIVE="[ACTIVE] "
+    else
+      WINDOW_INFO="[W${WINDOW_INDEX}] "
+    fi
+  else
+    WINDOW_INFO="[W${WINDOW_INDEX}] "
+  fi
+fi
+
+# Set title and priority based on event type
+case "$EVENT_TYPE" in
+  "agent-turn-complete")
+    TITLE="Codex Complete"
+    PRIORITY="high"
+    TAGS="white_check_mark"
+    ;;
+  "approval-requested")
+    TITLE="Codex Permission"
+    PRIORITY="urgent"
+    TAGS="warning"
+    ;;
+  *)
+    TITLE="Codex"
+    PRIORITY="default"
+    TAGS="robot"
+    ;;
+esac
+
+# Get local IP for ssh:// deep link (tap notification to open Termius)
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "")
+SSH_CLICK=""
+if [ -n "$LOCAL_IP" ]; then
+  SSH_CLICK="ssh://$(whoami)@${LOCAL_IP}"
+fi
+
+OUTER_EOF
+
+    # Append the curl command with the topic substituted
+    cat >> "$CODEX_NOTIFY_SCRIPT" << EOF
+curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
+  -H "Title: \$TITLE" \\
+  -H "Priority: \$PRIORITY" \\
+  -H "Tags: \$TAGS" \\
+  \${SSH_CLICK:+-H "Click: \$SSH_CLICK"} \\
+  -d "\${IS_ACTIVE}\${WINDOW_INFO}\${PROJECT}: \$MESSAGE"
+EOF
+
+    chmod +x "$CODEX_NOTIFY_SCRIPT"
+    print_success "Created Codex notification script with topic: $ntfy_topic"
+}
+
+update_codex_config() {
+    print_step "Updating Codex CLI config..."
+
+    # Create .codex dir if not exists
+    mkdir -p "$CODEX_DIR"
+
+    # Check if config.toml exists
+    if [[ ! -f "$CODEX_CONFIG_FILE" ]]; then
+        # Create new config.toml with notify setting
+        cat > "$CODEX_CONFIG_FILE" << EOF
+# VibeGo: Codex CLI notification configuration
+notify = ["$CODEX_NOTIFY_SCRIPT"]
+EOF
+        print_success "Created Codex config.toml with notification hook"
+        return 0
+    fi
+
+    # Backup existing config
+    backup_file "$CODEX_CONFIG_FILE"
+
+    # Check if notify is already configured
+    if grep -q "^notify" "$CODEX_CONFIG_FILE" 2>/dev/null; then
+        # Update existing notify line
+        # Use sed to replace the notify line
+        sed -i.bak "s|^notify.*|notify = [\"$CODEX_NOTIFY_SCRIPT\"]|" "$CODEX_CONFIG_FILE"
+        rm -f "${CODEX_CONFIG_FILE}.bak"
+        print_success "Updated existing notify setting in config.toml"
+    else
+        # Append notify setting
+        echo "" >> "$CODEX_CONFIG_FILE"
+        echo "# VibeGo: Notification hook" >> "$CODEX_CONFIG_FILE"
+        echo "notify = [\"$CODEX_NOTIFY_SCRIPT\"]" >> "$CODEX_CONFIG_FILE"
+        print_success "Added notify setting to config.toml"
+    fi
 }
 
 # ============================================================================
@@ -496,9 +714,9 @@ update_settings_json() {
     mkdir -p "$CLAUDE_DIR"
 
     # Check if settings.json exists
-    if [[ ! -f "$SETTINGS_FILE" ]]; then
+    if [[ ! -f "$CLAUDE_SETTINGS_FILE" ]]; then
         # Create new settings.json with all hooks
-        cat > "$SETTINGS_FILE" << EOF
+        cat > "$CLAUDE_SETTINGS_FILE" << EOF
 {
   "hooks": {
     "PreToolUse": [
@@ -507,7 +725,7 @@ update_settings_json() {
         "hooks": [
           {
             "type": "command",
-            "command": "$NOTIFY_SCRIPT"
+            "command": "$CLAUDE_NOTIFY_SCRIPT"
           }
         ]
       }
@@ -518,7 +736,7 @@ update_settings_json() {
         "hooks": [
           {
             "type": "command",
-            "command": "$NOTIFY_IDLE_SCRIPT"
+            "command": "$CLAUDE_NOTIFY_IDLE_SCRIPT"
           }
         ]
       },
@@ -527,7 +745,7 @@ update_settings_json() {
         "hooks": [
           {
             "type": "command",
-            "command": "$NOTIFY_IDLE_SCRIPT"
+            "command": "$CLAUDE_NOTIFY_IDLE_SCRIPT"
           }
         ]
       }
@@ -540,11 +758,11 @@ EOF
     fi
 
     # Backup settings.json
-    backup_file "$SETTINGS_FILE"
+    backup_file "$CLAUDE_SETTINGS_FILE"
 
     # Merge hooks into existing settings
     local temp_file=$(mktemp)
-    jq --arg notify_script "$NOTIFY_SCRIPT" --arg notify_idle_script "$NOTIFY_IDLE_SCRIPT" '
+    jq --arg notify_script "$CLAUDE_NOTIFY_SCRIPT" --arg notify_idle_script "$CLAUDE_NOTIFY_IDLE_SCRIPT" '
         # Ensure hooks object exists
         .hooks //= {} |
         # Ensure arrays exist
@@ -571,11 +789,11 @@ EOF
                 "hooks": [{"type": "command", "command": $notify_idle_script}]
             }]
         else . end)
-    ' "$SETTINGS_FILE" > "$temp_file"
+    ' "$CLAUDE_SETTINGS_FILE" > "$temp_file"
 
     # Validate JSON before replacing
     if jq empty "$temp_file" 2>/dev/null; then
-        mv "$temp_file" "$SETTINGS_FILE"
+        mv "$temp_file" "$CLAUDE_SETTINGS_FILE"
         print_success "Updated settings.json with notification hooks"
     else
         print_error "Failed to update settings.json (invalid JSON)"
@@ -804,12 +1022,21 @@ print_phone_instructions() {
     echo
     echo -e "${COLOR_BOLD}4. Test the Flow:${COLOR_RESET}"
     echo "   • SSH into your Mac from Termius"
-    echo "   • Run: cd <project> && claude"
-    echo "   • When Claude asks a question, you'll get a notification"
+    if [[ "$SETUP_CLAUDE" == true ]]; then
+        echo "   • Run: cd <project> && claude"
+        echo "   • When Claude asks a question, you'll get a notification"
+    fi
+    if [[ "$SETUP_CODEX" == true ]]; then
+        echo "   • Run: cd <project> && codex"
+        echo "   • When Codex finishes a task, you'll get a notification"
+        if [[ "$SETUP_CLAUDE" == true ]]; then
+            echo "   • Note: Codex only notifies on task completion (not questions)"
+        fi
+    fi
     echo -e "   • ${COLOR_GREEN}Tap the notification → opens Termius directly${COLOR_RESET}"
     echo
     echo -e "${COLOR_BOLD}5. Multiple Sessions (tmux windows):${COLOR_RESET}"
-    echo "   • Ctrl+b c  → Create new window for another Claude session"
+    echo "   • Ctrl+b c  → Create new window for another agentic coding session"
     echo "   • Ctrl+b 0-9 → Switch to window (notification shows [W0], [W1], etc.)"
     echo "   • Notifications show [ACTIVE] if you're viewing that window"
     echo
@@ -829,12 +1056,22 @@ print_summary() {
     echo -e "  Local IP:     ${COLOR_GREEN}$local_ip${COLOR_RESET}"
     echo -e "  Username:     ${COLOR_GREEN}$(whoami)${COLOR_RESET}"
     echo -e "  Hostname:     ${COLOR_GREEN}$(get_hostname)${COLOR_RESET}"
+    local cli_list=""
+    [[ "$SETUP_CLAUDE" == true ]] && cli_list="Claude Code"
+    [[ "$SETUP_CODEX" == true ]] && cli_list="${cli_list:+$cli_list, }Codex CLI"
+    echo -e "  CLI tools:    ${COLOR_GREEN}${cli_list:-None}${COLOR_RESET}"
     echo
     echo -e "${COLOR_BOLD}Next Steps:${COLOR_RESET}"
     echo "  1. Set up your phone (see instructions above)"
     echo "  2. Connect via Termius from your phone"
-    echo "  3. Run 'claude' in any project directory"
-    echo "  4. Get push notifications when Claude needs input"
+    if [[ "$SETUP_CLAUDE" == true && "$SETUP_CODEX" == true ]]; then
+        echo "  3. Run 'claude' or 'codex' in any project directory"
+    elif [[ "$SETUP_CLAUDE" == true ]]; then
+        echo "  3. Run 'claude' in any project directory"
+    elif [[ "$SETUP_CODEX" == true ]]; then
+        echo "  3. Run 'codex' in any project directory"
+    fi
+    echo "  4. Get push notifications when the AI needs input or finishes"
     echo
     echo -e "${COLOR_BOLD}Documentation:${COLOR_RESET}"
     echo "  See README.md for detailed usage and troubleshooting"
@@ -869,9 +1106,14 @@ main() {
     # Collect user input
     print_step "Configuration"
     echo
-    echo "VibeGo will set up your Mac for mobile Claude Code control."
-    echo "This includes installing dependencies and configuring hooks."
+    echo "VibeGo will set up your Mac for mobile AI coding assistant control."
+    echo "Supports Claude Code and Codex CLI."
     echo
+
+    # Select CLI tools to configure
+    if ! select_cli_tools; then
+        exit 1
+    fi
 
     # Get ntfy topic
     local ntfy_topic=""
@@ -898,21 +1140,25 @@ main() {
     fi
     echo
 
-    # Create hooks directory
-    create_hooks_dir
-    echo
-
-    # Install notification scripts
-    install_notify_script "$ntfy_topic"
-    install_notify_idle_script "$ntfy_topic"
-    echo
-
-    # Update settings.json
-    if ! update_settings_json; then
-        print_error "Failed to update settings.json"
-        exit 1
+    # Configure Claude Code if selected
+    if [[ "$SETUP_CLAUDE" == true ]]; then
+        create_claude_hooks_dir
+        install_claude_notify_script "$ntfy_topic"
+        install_claude_notify_idle_script "$ntfy_topic"
+        if ! update_settings_json; then
+            print_error "Failed to update Claude settings.json"
+            exit 1
+        fi
+        echo
     fi
-    echo
+
+    # Configure Codex CLI if selected
+    if [[ "$SETUP_CODEX" == true ]]; then
+        create_codex_hooks_dir
+        install_codex_notify_script "$ntfy_topic"
+        update_codex_config
+        echo
+    fi
 
     # Update shell configs
     update_zshenv
