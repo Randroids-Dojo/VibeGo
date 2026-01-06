@@ -67,7 +67,7 @@ __     __ _  _            ____
 
 EOF
     echo -e "${COLOR_RESET}${COLOR_BOLD}VibeGo Setup v${VIBEGO_VERSION}${COLOR_RESET}"
-    echo -e "${COLOR_CYAN}Control Claude Code from your Android phone${COLOR_RESET}"
+    echo -e "${COLOR_CYAN}Control Claude Code from your phone${COLOR_RESET}"
     echo
 }
 
@@ -378,6 +378,13 @@ if [ -n "$TMUX_PANE" ]; then
   fi
 fi
 
+# Get local IP for ssh:// deep link (tap notification to open Termius)
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "")
+SSH_CLICK=""
+if [ -n "$LOCAL_IP" ]; then
+  SSH_CLICK="ssh://$(whoami)@${LOCAL_IP}"
+fi
+
 OUTER_EOF
 
     # Append the curl command with the topic substituted
@@ -386,6 +393,7 @@ curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
   -H "Title: Claude Code" \\
   -H "Priority: high" \\
   -H "Tags: robot" \\
+  \${SSH_CLICK:+-H "Click: \$SSH_CLICK"} \\
   -d "\${IS_ACTIVE}\${WINDOW_INFO}\${PROJECT}: \$QUESTION"
 EOF
 
@@ -454,6 +462,13 @@ case "$NOTIFICATION_TYPE" in
     ;;
 esac
 
+# Get local IP for ssh:// deep link (tap notification to open Termius)
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "")
+SSH_CLICK=""
+if [ -n "$LOCAL_IP" ]; then
+  SSH_CLICK="ssh://$(whoami)@${LOCAL_IP}"
+fi
+
 OUTER_EOF
 
     # Append the curl command with the topic substituted
@@ -462,6 +477,7 @@ curl -s -X POST "$NTFY_URL/$ntfy_topic" \\
   -H "Title: \$TITLE" \\
   -H "Priority: \$PRIORITY" \\
   -H "Tags: \$TAGS" \\
+  \${SSH_CLICK:+-H "Click: \$SSH_CLICK"} \\
   -d "\${IS_ACTIVE}\${WINDOW_INFO}\${PROJECT}: \$MESSAGE"
 EOF
 
@@ -764,33 +780,33 @@ test_ntfy_connection() {
 # SUMMARY FUNCTIONS
 # ============================================================================
 
-print_android_instructions() {
+print_phone_instructions() {
     local ntfy_topic="$1"
     local local_ip="$2"
 
     echo
     echo -e "${COLOR_BOLD}${COLOR_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}  Android Setup Instructions${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}  Phone Setup Instructions${COLOR_RESET}"
     echo -e "${COLOR_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
     echo
-    echo -e "${COLOR_BOLD}1. Install Apps from Play Store:${COLOR_RESET}"
-    echo "   • ConnectBot (SSH client with deep link support)"
-    echo "   • ntfy (push notifications)"
+    echo -e "${COLOR_BOLD}1. Install Apps:${COLOR_RESET}"
+    echo "   • Termius (https://termius.com) — SSH client for iOS & Android"
+    echo "   • ntfy (https://ntfy.sh) — push notifications for iOS & Android"
     echo
     echo -e "${COLOR_BOLD}2. Configure ntfy:${COLOR_RESET}"
     echo "   • Open ntfy → Tap '+' → Subscribe to topic"
     echo -e "   • Topic: ${COLOR_GREEN}${COLOR_BOLD}$ntfy_topic${COLOR_RESET}"
     echo
-    echo -e "${COLOR_BOLD}3. Configure ConnectBot:${COLOR_RESET}"
-    echo "   • Open ConnectBot → Tap '+'"
+    echo -e "${COLOR_BOLD}3. Configure Termius:${COLOR_RESET}"
+    echo "   • Open Termius → Add new host"
     echo -e "   • Enter: ${COLOR_GREEN}${COLOR_BOLD}$(whoami)@$local_ip${COLOR_RESET}"
     echo "   • Connect once to save the host"
     echo
     echo -e "${COLOR_BOLD}4. Test the Flow:${COLOR_RESET}"
-    echo "   • SSH into your Mac from ConnectBot"
+    echo "   • SSH into your Mac from Termius"
     echo "   • Run: cd <project> && claude"
     echo "   • When Claude asks a question, you'll get a notification"
-    echo "   • Tap the notification to jump back to ConnectBot"
+    echo -e "   • ${COLOR_GREEN}Tap the notification → opens Termius directly${COLOR_RESET}"
     echo
     echo -e "${COLOR_BOLD}5. Multiple Sessions (tmux windows):${COLOR_RESET}"
     echo "   • Ctrl+b c  → Create new window for another Claude session"
@@ -815,8 +831,8 @@ print_summary() {
     echo -e "  Hostname:     ${COLOR_GREEN}$(get_hostname)${COLOR_RESET}"
     echo
     echo -e "${COLOR_BOLD}Next Steps:${COLOR_RESET}"
-    echo "  1. Set up your Android device (see instructions above)"
-    echo "  2. Connect via ConnectBot from your Android phone"
+    echo "  1. Set up your phone (see instructions above)"
+    echo "  2. Connect via Termius from your phone"
     echo "  3. Run 'claude' in any project directory"
     echo "  4. Get push notifications when Claude needs input"
     echo
@@ -923,8 +939,8 @@ main() {
         print_info "Find your IP in System Settings → Network"
     fi
 
-    # Print Android instructions
-    print_android_instructions "$ntfy_topic" "$local_ip"
+    # Print phone instructions
+    print_phone_instructions "$ntfy_topic" "$local_ip"
 
     # Print summary
     print_summary "$ntfy_topic" "$local_ip"

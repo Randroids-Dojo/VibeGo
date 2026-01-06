@@ -1,13 +1,13 @@
 # VibeGo
 
-Control Claude Code on your Mac from your Android phone over local WiFi.
+Control Claude Code on your Mac from your phone over local WiFi.
 
 ## How It Works
 
 ```
-Android (ConnectBot) ──SSH──> Mac (tmux + Claude Code)
-                                      │
-Android (ntfy) <───────────── notification hooks
+Phone (Termius) ──SSH──> Mac (tmux + Claude Code)
+                                │
+Phone (ntfy) <────────── notification hooks (tap to open Termius)
 ```
 
 SSH into your Mac, auto-attach to a persistent tmux session, and get push notifications when Claude needs input.
@@ -26,23 +26,24 @@ The script installs dependencies (tmux, jq), configures Claude Code hooks, and s
 
 **Required:** Enable Remote Login in System Settings → General → Sharing.
 
-### Android Setup
+### Phone Setup
 
 1. **Install apps:**
-   - [ConnectBot](https://play.google.com/store/apps/details?id=org.connectbot) — SSH client
-   - [ntfy](https://play.google.com/store/apps/details?id=io.heckel.ntfy) — push notifications
+   - [Termius](https://termius.com) — SSH client (iOS & Android)
+   - [ntfy](https://ntfy.sh) — push notifications (iOS & Android)
 
 2. **Configure ntfy:**
    - Open ntfy → tap **+** → enter your topic name (shown by setup script)
 
-3. **Configure ConnectBot:**
-   - Enter: `username@ip` (shown by setup script)
+3. **Configure Termius:**
+   - Add new host: `username@ip` (shown by setup script)
    - Connect once to save
 
 4. **Test:**
    - SSH into your Mac → auto-attaches to tmux
    - Run `claude` in any project
    - Get notification when Claude needs input
+   - **Tap notification → opens Termius directly**
 
 ## Notifications
 
@@ -69,7 +70,7 @@ Create multiple Claude Code sessions in tmux windows:
 | Switch to window N | `Ctrl+b N` (0-9) |
 | Next/prev window | `Ctrl+b n` / `Ctrl+b p` |
 
-**Using Ctrl in ConnectBot:** Tap screen → tap Ctrl (left) → b → window number.
+**Using Ctrl in Termius:** Long-press on the keyboard area → select Ctrl → then press b, then window number.
 
 ## Troubleshooting
 
