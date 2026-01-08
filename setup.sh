@@ -61,6 +61,7 @@ SYMBOL_INFO="ℹ"
 CREATED_BACKUPS=()
 SETUP_CLAUDE=false
 SETUP_CODEX=false
+SETUP_JJ=false
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -704,6 +705,110 @@ EOF
 }
 
 # ============================================================================
+# JJ VCS INTEGRATION (Optional)
+# ============================================================================
+
+check_jj_installed() {
+    command -v jj &>/dev/null
+}
+
+setup_jj() {
+    print_step "Setting up jj VCS for multi-session workflow..."
+
+    # Check if jj is installed
+    if ! check_jj_installed; then
+        print_info "Installing jj..."
+        if brew install jj &>/dev/null; then
+            print_success "jj installed successfully"
+        else
+            print_error "Failed to install jj"
+            print_info "Install manually: brew install jj"
+            return 1
+        fi
+    else
+        print_success "jj already installed: $(jj --version 2>/dev/null | head -1)"
+    fi
+
+    # Create jj config directory
+    local jj_config_dir="$HOME/.config/jj"
+    local jj_config_file="$jj_config_dir/config.toml"
+
+    mkdir -p "$jj_config_dir"
+
+    # Create jj config if not exists
+    if [[ ! -f "$jj_config_file" ]]; then
+        print_info "Creating jj configuration..."
+
+        # Get git user info if available
+        local git_name=$(git config --global user.name 2>/dev/null || echo "Your Name")
+        local git_email=$(git config --global user.email 2>/dev/null || echo "your@email.com")
+
+        cat > "$jj_config_file" << EOF
+# jj configuration for VibeGo multi-session workflow
+[user]
+name = "$git_name"
+email = "$git_email"
+
+[ui]
+default-command = "log"
+diff-editor = ":builtin"
+merge-editor = ":builtin"
+
+# VibeGo aliases for multi-session workflow
+[aliases]
+# Quick status
+s = ["status"]
+# Start new independent change from main
+task = ["new", "main", "-m"]
+# Show all active changes
+tasks = ["log", "-r", "main.."]
+# Reconcile: rebase all changes onto latest main
+sync = ["rebase", "-s", "all:roots(main..@)", "-d", "main"]
+EOF
+        print_success "Created jj config at $jj_config_file"
+    else
+        print_success "jj config already exists"
+    fi
+
+    # Copy helper scripts
+    local bin_dir="$HOME/.local/bin"
+    mkdir -p "$bin_dir"
+
+    if [[ -f "$SCRIPT_DIR/scripts/jj-helpers.sh" ]]; then
+        cp "$SCRIPT_DIR/scripts/jj-helpers.sh" "$bin_dir/"
+        chmod +x "$bin_dir/jj-helpers.sh"
+        print_success "Installed jj-helpers.sh to $bin_dir"
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/jj-init-project.sh" ]]; then
+        cp "$SCRIPT_DIR/scripts/jj-init-project.sh" "$bin_dir/jj-init-project"
+        chmod +x "$bin_dir/jj-init-project"
+        print_success "Installed jj-init-project to $bin_dir"
+    fi
+
+    # Add to shell if not present
+    local marker="# VibeGo: jj helpers"
+    if ! grep -q "$marker" "$ZSHRC" 2>/dev/null; then
+        cat >> "$ZSHRC" << EOF
+
+$marker
+export PATH="\$HOME/.local/bin:\$PATH"
+if [[ -f "\$HOME/.local/bin/jj-helpers.sh" ]]; then
+  source "\$HOME/.local/bin/jj-helpers.sh"
+fi
+EOF
+        print_success "Added jj helpers to .zshrc"
+    else
+        print_success "jj helpers already in .zshrc"
+    fi
+
+    echo
+    print_info "jj setup complete!"
+    print_info "To initialize a project: jj-init-project /path/to/project"
+    print_info "See docs/jj-workflow.md for multi-session workflow guide"
+}
+
+# ============================================================================
 # CONFIGURATION FUNCTIONS
 # ============================================================================
 
@@ -1060,6 +1165,9 @@ print_summary() {
     [[ "$SETUP_CLAUDE" == true ]] && cli_list="Claude Code"
     [[ "$SETUP_CODEX" == true ]] && cli_list="${cli_list:+$cli_list, }Codex CLI"
     echo -e "  CLI tools:    ${COLOR_GREEN}${cli_list:-None}${COLOR_RESET}"
+    if [[ "$SETUP_JJ" == true ]]; then
+        echo -e "  jj VCS:       ${COLOR_GREEN}Enabled (multi-session support)${COLOR_RESET}"
+    fi
     echo
     echo -e "${COLOR_BOLD}Next Steps:${COLOR_RESET}"
     echo "  1. Set up your phone (see instructions above)"
@@ -1157,6 +1265,19 @@ main() {
         create_codex_hooks_dir
         install_codex_notify_script "$ntfy_topic"
         update_codex_config
+        echo
+    fi
+
+    # Optional: jj VCS for multi-session workflow
+    echo
+    print_step "Optional: jj VCS Integration"
+    echo
+    echo "jj (Jujutsu) enables multiple Claude Code sessions to work on the"
+    echo "same project simultaneously without conflicts blocking workflow."
+    echo
+    if ask_yes_no "Set up jj VCS for multi-session workflow?" "n"; then
+        SETUP_JJ=true
+        setup_jj
         echo
     fi
 

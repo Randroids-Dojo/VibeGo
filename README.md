@@ -85,6 +85,86 @@ Create multiple AI coding sessions in tmux windows:
 
 **Using Ctrl in Termius:** Long-press on the keyboard area → select Ctrl → then press b, then window number.
 
+## jj VCS Integration (Optional)
+
+Work on the same project from multiple Claude Code sessions simultaneously without conflicts blocking your workflow.
+
+[jj (Jujutsu)](https://github.com/jj-vcs/jj) is a Git-compatible VCS that:
+- Records conflicts instead of blocking operations
+- Enables multiple independent changes in parallel
+- Auto-reconciles concurrent edits via operation log
+
+### Setup
+
+The setup script offers jj as an optional component, or install manually:
+
+```bash
+brew install jj
+./scripts/jj-init-project.sh /path/to/your/project
+source ~/.local/bin/jj-helpers.sh
+```
+
+### Multi-Session Workflow
+
+```bash
+# Window 0: Work on player feature
+jj-task "add player dash ability"
+# Claude Code works...
+
+# Window 1: Work on enemy AI (same time, same repo)
+jj-task "improve enemy pathfinding"
+# Claude Code works...
+
+# Later: See all active work
+jj-tasks
+
+# Reconcile when ready
+jj-reconcile
+```
+
+### Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `jj-task "desc"` | Start new independent change |
+| `jj-tasks` | See all active changes |
+| `jj-conflicts` | Show changes with conflicts |
+| `jj-sync` | Rebase onto latest main |
+| `jj-reconcile` | Options for combining work |
+| `jj-push` | Push to GitHub |
+
+See [docs/jj-workflow.md](docs/jj-workflow.md) for full documentation.
+
+## Auto-Responder (Optional)
+
+Run an LLM agent that automatically responds to Claude Code prompts:
+
+```bash
+cd auto-responder
+./setup.sh
+```
+
+The auto-responder can:
+- **Auto-approve safe operations** (file reads, searches)
+- **Use an LLM** (Claude/OpenAI/Ollama) to analyze prompts
+- **Always notify** for sensitive operations (deletions, bash commands)
+
+Configure rules in `~/.config/vibego/auto-responder.yaml`:
+
+```yaml
+rules:
+  prompts:
+    permissions:
+      auto_respond_patterns:
+        - "Read file"
+        - "List directory"
+      always_notify_patterns:
+        - "Write|Edit|Delete"
+        - "Bash|Execute"
+```
+
+See [auto-responder/README.md](auto-responder/README.md) for full documentation.
+
 ## Troubleshooting
 
 **No notifications:** Test manually:
@@ -102,3 +182,4 @@ Inspired by [Claude Code on the Go](https://granda.org/en/2026/01/02/claude-code
 
 - [ntfy.sh](https://ntfy.sh) — push notifications
 - [tmux](https://github.com/tmux/tmux) — terminal multiplexing
+- [jj (Jujutsu)](https://github.com/jj-vcs/jj) — Git-compatible VCS for concurrent workflows
