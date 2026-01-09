@@ -385,8 +385,9 @@ start_capture() {
         local log_file="$LOG_DIR/window-${win_idx}.log"
         > "$log_file"  # Clear log
 
-        # Capture the first pane of each window
-        tmux pipe-pane -t "${SESSION}:${win_idx}" -o "cat >> '$log_file'"
+        # Capture with perl filtering for ANSI codes and control sequences
+        tmux pipe-pane -t "${SESSION}:${win_idx}" -o \
+            "perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\e\][^\a]*\a//g; s/\e[()][AB012]//g; s/\e\[[\?0-9;]*[hl]//g; s/\r//g; s/[\x00-\x08\x0b\x0c\x0e-\x1f]//g' >> '$log_file'"
         echo -e "${GREEN}Capturing window $win_idx → window-${win_idx}.log${RESET}"
     done
 
@@ -405,7 +406,8 @@ start_capture() {
                 local log_file="$LOG_DIR/window-${win_idx}.log"
                 if [[ ! -f "$log_file" ]]; then
                     > "$log_file"
-                    tmux pipe-pane -t "${SESSION}:${win_idx}" -o "cat >> '$log_file'"
+                    tmux pipe-pane -t "${SESSION}:${win_idx}" -o \
+                        "perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\e\][^\a]*\a//g; s/\e[()][AB012]//g; s/\e\[[\?0-9;]*[hl]//g; s/\r//g; s/[\x00-\x08\x0b\x0c\x0e-\x1f]//g' >> '$log_file'"
                 fi
             done
         done
