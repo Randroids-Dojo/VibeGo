@@ -206,6 +206,53 @@ create_html_viewer() {
             font-size: 11px;
         }
         #screenshot-loading { color: #53bf9d; font-size: 14px; }
+        /* Navigation Confirmation Modal */
+        #nav-confirm-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 300;
+            justify-content: center;
+            align-items: center;
+        }
+        #nav-confirm-modal.visible { display: flex; }
+        #nav-confirm-modal .modal-content {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 300px;
+            border: 1px solid #0f3460;
+        }
+        #nav-confirm-modal h3 {
+            color: #e94560;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        #nav-confirm-modal p {
+            color: #aaa;
+            margin-bottom: 25px;
+            font-size: 13px;
+        }
+        #nav-confirm-modal .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        #nav-confirm-modal .stay-btn {
+            background: #53bf9d;
+            color: #1a1a2e;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        #nav-confirm-modal .leave-btn {
+            background: #0f3460;
+            color: #aaa;
+            padding: 12px 24px;
+            border-radius: 6px;
+        }
     </style>
 </head>
 <body>
@@ -234,6 +281,16 @@ create_html_viewer() {
         <div id="screenshot-loading">Taking screenshot...</div>
         <img id="screenshot-img" style="display:none" onclick="closeScreenshot()">
         <div class="info">Tap image or Close to dismiss</div>
+    </div>
+    <div id="nav-confirm-modal">
+        <div class="modal-content">
+            <h3>Leave this page?</h3>
+            <p>You will stop viewing the terminal output.</p>
+            <div class="modal-buttons">
+                <button class="stay-btn" onclick="stayOnPage()">Stay</button>
+                <button class="leave-btn" onclick="leavePage()">Leave</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -470,6 +527,99 @@ create_html_viewer() {
 
         function closeScreenshot() {
             document.getElementById('screenshot-modal').classList.remove('visible');
+        }
+
+        // Horizontal swipe for tab switching
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isHorizontalSwipe = false;
+        let swipeHandled = false;
+        const SWIPE_MIN_DISTANCE = 80; // minimum swipe distance
+
+        document.addEventListener('touchstart', function(e) {
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            isHorizontalSwipe = false;
+            swipeHandled = false;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', function(e) {
+            if (swipeHandled) return;
+
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = Math.abs(touch.clientY - touchStartY);
+            const absDeltaX = Math.abs(deltaX);
+
+            // Determine swipe direction early (after 15px movement)
+            if (!isHorizontalSwipe && absDeltaX > 15) {
+                // If more horizontal than vertical, it's a tab swipe
+                isHorizontalSwipe = absDeltaX > deltaY * 1.5;
+            }
+
+            // If horizontal swipe, prevent scrolling and browser gestures
+            if (isHorizontalSwipe) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchend', function(e) {
+            if (swipeHandled || windows.length <= 1) return;
+
+            const touch = e.changedTouches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = Math.abs(touch.clientY - touchStartY);
+
+            // Must be horizontal swipe with enough distance
+            if (!isHorizontalSwipe || Math.abs(deltaX) < SWIPE_MIN_DISTANCE) return;
+
+            swipeHandled = true;
+
+            if (deltaX > 0) {
+                // Swipe right = previous tab
+                const prevIndex = currentWindow > 0 ? currentWindow - 1 : windows.length - 1;
+                switchWindow(prevIndex);
+            } else {
+                // Swipe left = next tab
+                const nextIndex = currentWindow < windows.length - 1 ? currentWindow + 1 : 0;
+                switchWindow(nextIndex);
+            }
+        }, { passive: true });
+
+        // Navigation confirmation - beforeunload for browser close/refresh
+        window.addEventListener('beforeunload', function(e) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        });
+
+        // Navigation confirmation - back button handling
+        let allowNavigation = false;
+
+        // Push initial state to trap back button
+        history.pushState({ page: 'viewer' }, '', window.location.href);
+
+        window.addEventListener('popstate', function(e) {
+            if (!allowNavigation) {
+                // Push state again to stay on page while modal is shown
+                history.pushState({ page: 'viewer' }, '', window.location.href);
+                showNavConfirm();
+            }
+        });
+
+        function showNavConfirm() {
+            document.getElementById('nav-confirm-modal').classList.add('visible');
+        }
+
+        function stayOnPage() {
+            document.getElementById('nav-confirm-modal').classList.remove('visible');
+        }
+
+        function leavePage() {
+            document.getElementById('nav-confirm-modal').classList.remove('visible');
+            allowNavigation = true;
+            history.back();
         }
     </script>
 </body>
