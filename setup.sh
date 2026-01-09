@@ -441,8 +441,8 @@ PROJECT=$(pwd | rev | cut -d'/' -f1-2 | rev)
 WINDOW_INFO=""
 IS_ACTIVE=""
 if [ -n "$TMUX_PANE" ]; then
-  # Get current window index
-  WINDOW_INDEX=$(tmux display-message -p '#{window_index}' 2>/dev/null)
+  # Get window index for THIS pane (not the active window)
+  WINDOW_INDEX=$(tmux display-message -t "$TMUX_PANE" -p '#{window_index}' 2>/dev/null)
 
   CLIENT=$(tmux list-clients -F '#{client_name}' 2>/dev/null | head -1)
   if [ -n "$CLIENT" ]; then
@@ -457,6 +457,27 @@ if [ -n "$TMUX_PANE" ]; then
     # No client attached, show window number
     WINDOW_INFO="[W${WINDOW_INDEX}] "
   fi
+fi
+
+# Write pending event for web viewer remote response
+VIBEGO_EVENT_DIR="$HOME/.vibego/logs"
+if [ -d "$VIBEGO_EVENT_DIR" ] && [ -n "$TMUX_PANE" ]; then
+  TMUX_SESSION=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "mobile")
+  OPTIONS=$(echo "$EVENT_DATA" | jq -c '.tool_input.questions[0].options // []' 2>/dev/null || echo "[]")
+
+  jq -n \
+    --arg id "$(date +%s)$$" \
+    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg event_type "AskUserQuestion" \
+    --arg session "$TMUX_SESSION" \
+    --arg window "${WINDOW_INDEX:-0}" \
+    --arg pane "$TMUX_PANE" \
+    --arg project "$PROJECT" \
+    --arg cwd "$(pwd)" \
+    --arg question "$QUESTION" \
+    --argjson options "$OPTIONS" \
+    '{id:$id,timestamp:$timestamp,event_type:$event_type,tmux:{session:$session,window:$window,pane:$pane},project:$project,cwd:$cwd,question:$question,options:$options,message:null}' \
+    > "$VIBEGO_EVENT_DIR/pending-event-W${WINDOW_INDEX:-0}.json" 2>/dev/null
 fi
 
 # Get local IP for ssh:// deep link (tap notification to open Termius)
@@ -503,6 +524,12 @@ MESSAGE=$(echo "$EVENT_DATA" | jq -r '.message // "Claude needs your attention"'
 NOTIFICATION_TYPE=$(echo "$EVENT_DATA" | jq -r '.notification_type // "unknown"')
 CWD=$(echo "$EVENT_DATA" | jq -r '.cwd // "."')
 
+# Skip noisy progress/status updates
+# Match: percentages, loading words, "esc to interrupt", token counts, timing patterns, ctrl+ hints
+if echo "$MESSAGE" | grep -qiE '^[0-9]+%|Loading|Downloading|Installing|Compiling|Building|Fetching|Resolving|Progress|esc to interrupt|[0-9]+[kmg]? tokens|[0-9]+[ms] [0-9]+|ctrl\+|timeout:|Running\.\.\.$'; then
+  exit 0
+fi
+
 # Show last 2 path components for better session identification
 PROJECT=$(echo "$CWD" | rev | cut -d'/' -f1-2 | rev)
 
@@ -510,7 +537,8 @@ PROJECT=$(echo "$CWD" | rev | cut -d'/' -f1-2 | rev)
 WINDOW_INFO=""
 IS_ACTIVE=""
 if [ -n "$TMUX_PANE" ]; then
-  WINDOW_INDEX=$(tmux display-message -p '#{window_index}' 2>/dev/null)
+  # Get window index for THIS pane (not the active window)
+  WINDOW_INDEX=$(tmux display-message -t "$TMUX_PANE" -p '#{window_index}' 2>/dev/null)
   CLIENT=$(tmux list-clients -F '#{client_name}' 2>/dev/null | head -1)
   if [ -n "$CLIENT" ]; then
     CLIENT_PANE=$(tmux display-message -t "$CLIENT" -p '#{pane_id}' 2>/dev/null)
@@ -542,6 +570,60 @@ case "$NOTIFICATION_TYPE" in
     TAGS="robot"
     ;;
 esac
+
+# Write pending event for web viewer remote response
+VIBEGO_EVENT_DIR="$HOME/.vibego/logs"
+EVENT_FILE="$VIBEGO_EVENT_DIR/pending-event-W${WINDOW_INDEX:-0}.json"
+
+if [ -d "$VIBEGO_EVENT_DIR" ] && [ -n "$TMUX_PANE" ]; then
+  TMUX_SESSION=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "mobile")
+
+  # For idle_prompt, don't overwrite existing AskUserQuestion events (they have options)
+  if [ "$NOTIFICATION_TYPE" = "idle_prompt" ] && [ -f "$EVENT_FILE" ]; then
+    EXISTING_TYPE=$(jq -r '.event_type // ""' "$EVENT_FILE" 2>/dev/null)
+    if [ "$EXISTING_TYPE" = "AskUserQuestion" ]; then
+      # Don't overwrite - AskUserQuestion has the actual options
+      :
+    else
+      # Overwrite other event types
+      jq -n \
+        --arg id "$(date +%s)$$" \
+        --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg event_type "$NOTIFICATION_TYPE" \
+        --arg notification_type "$NOTIFICATION_TYPE" \
+        --arg session "$TMUX_SESSION" \
+        --arg window "${WINDOW_INDEX:-0}" \
+        --arg pane "$TMUX_PANE" \
+        --arg project "$PROJECT" \
+        --arg cwd "$CWD" \
+        --arg message "$MESSAGE" \
+        '{id:$id,timestamp:$timestamp,event_type:$event_type,notification_type:$notification_type,tmux:{session:$session,window:$window,pane:$pane},project:$project,cwd:$cwd,question:null,options:[],message:$message}' \
+        > "$EVENT_FILE" 2>/dev/null
+    fi
+  else
+    # permission_prompt or no existing file - always write
+    if [ "$NOTIFICATION_TYPE" = "permission_prompt" ]; then
+      EVENT_OPTIONS='["y","n"]'
+    else
+      EVENT_OPTIONS='[]'
+    fi
+
+    jq -n \
+      --arg id "$(date +%s)$$" \
+      --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg event_type "$NOTIFICATION_TYPE" \
+      --arg notification_type "$NOTIFICATION_TYPE" \
+      --arg session "$TMUX_SESSION" \
+      --arg window "${WINDOW_INDEX:-0}" \
+      --arg pane "$TMUX_PANE" \
+      --arg project "$PROJECT" \
+      --arg cwd "$CWD" \
+      --arg message "$MESSAGE" \
+      --argjson options "$EVENT_OPTIONS" \
+      '{id:$id,timestamp:$timestamp,event_type:$event_type,notification_type:$notification_type,tmux:{session:$session,window:$window,pane:$pane},project:$project,cwd:$cwd,question:null,options:$options,message:$message}' \
+      > "$EVENT_FILE" 2>/dev/null
+  fi
+fi
 
 # Get local IP for ssh:// deep link (tap notification to open Termius)
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "")

@@ -253,6 +253,170 @@ create_html_viewer() {
             padding: 12px 24px;
             border-radius: 6px;
         }
+        /* Response Modal */
+        #response-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 400;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        #response-modal.visible { display: flex; }
+        #response-modal .modal-content {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid #0f3460;
+        }
+        #response-modal h3 {
+            color: #e94560;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        #response-modal .project-info {
+            color: #666;
+            font-size: 11px;
+            margin-bottom: 15px;
+        }
+        #response-modal .question-text {
+            color: #eee;
+            margin-bottom: 10px;
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 8px;
+            background: #0f3460;
+            border-radius: 6px;
+            max-height: 60px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #response-modal .context-text {
+            color: #aaa;
+            margin-bottom: 15px;
+            font-size: 11px;
+            line-height: 1.4;
+            padding: 8px;
+            background: #0a1628;
+            border-radius: 6px;
+            max-height: 80px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px solid #0f3460;
+        }
+        #response-modal .context-label {
+            color: #666;
+            font-size: 10px;
+            margin-bottom: 5px;
+        }
+        #response-modal .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        #response-modal .option-btn {
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #53bf9d;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            text-align: left;
+            font-family: inherit;
+        }
+        #response-modal .option-btn:active {
+            background: #53bf9d;
+            color: #1a1a2e;
+        }
+        #response-modal .custom-input-section {
+            margin-top: 15px;
+            border-top: 1px solid #0f3460;
+            padding-top: 15px;
+        }
+        #response-modal .custom-input-section label {
+            display: block;
+            color: #aaa;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+        #response-modal textarea {
+            width: 100%;
+            background: #0f3460;
+            border: 1px solid #53bf9d;
+            color: #eee;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 60px;
+            box-sizing: border-box;
+        }
+        #response-modal .modal-footer {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        #response-modal .send-btn {
+            flex: 1;
+            background: #53bf9d;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #response-modal .dismiss-btn {
+            background: #0f3460;
+            color: #aaa;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        /* Pending event indicator */
+        #pending-indicator {
+            display: none;
+            position: fixed;
+            top: 75px;
+            right: 10px;
+            background: #e94560;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            cursor: pointer;
+            z-index: 150;
+            animation: pulse-indicator 1.5s infinite;
+        }
+        #pending-indicator.visible { display: block; }
+        @keyframes pulse-indicator {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+        }
+        /* Respond button highlight when pending */
+        #respondBtn.has-pending {
+            background: #e94560;
+            animation: pulse-indicator 1.5s infinite;
+        }
+        /* Tab flash when window has pending event */
+        .tab.has-pending-event {
+            background: #e94560 !important;
+            animation: pulse-indicator 1.5s infinite;
+        }
     </style>
 </head>
 <body>
@@ -273,7 +437,7 @@ create_html_viewer() {
         <button onclick="jumpToBottom()">Bottom</button>
         <button id="autoScrollBtn" class="active" onclick="toggleAutoScroll()">Auto</button>
         <button onclick="clearTerminal()">Clear</button>
-        <button onclick="refreshWindows()">Refresh</button>
+        <button id="respondBtn" onclick="toggleResponseModal()">Respond</button>
         <button onclick="takeScreenshot()">Screen</button>
     </div>
     <div id="screenshot-modal">
@@ -289,6 +453,27 @@ create_html_viewer() {
             <div class="modal-buttons">
                 <button class="stay-btn" onclick="stayOnPage()">Stay</button>
                 <button class="leave-btn" onclick="leavePage()">Leave</button>
+            </div>
+        </div>
+    </div>
+    <!-- Pending Event Indicator -->
+    <div id="pending-indicator" onclick="showResponseModal()">Response Needed</div>
+    <!-- Response Modal -->
+    <div id="response-modal">
+        <div class="modal-content">
+            <h3 id="response-modal-title">Question</h3>
+            <div class="project-info" id="response-modal-project"></div>
+            <div class="question-text" id="response-modal-question"></div>
+            <div class="context-label">Last output:</div>
+            <div class="context-text" id="response-modal-context"></div>
+            <div class="options" id="response-modal-options"></div>
+            <div class="custom-input-section">
+                <label>Or type a custom response:</label>
+                <textarea id="custom-response" placeholder="Type your response..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="dismiss-btn" onclick="dismissResponseModal()">Dismiss</button>
+                <button class="send-btn" onclick="sendCustomResponse()">Send</button>
             </div>
         </div>
     </div>
@@ -385,6 +570,9 @@ create_html_viewer() {
                 return;
             }
 
+            // Save scroll position before update
+            const savedScrollY = window.scrollY;
+
             // If cleared, only show content after the clear point
             let content = data.content;
             if (data.clearedAtLength && data.clearedAtLength > 0) {
@@ -399,6 +587,9 @@ create_html_viewer() {
 
             if (autoScroll) {
                 window.scrollTo(0, document.body.scrollHeight);
+            } else {
+                // Restore scroll position when auto-scroll is off
+                window.scrollTo(0, savedScrollY);
             }
         }
 
@@ -413,11 +604,14 @@ create_html_viewer() {
             tabsContainer.innerHTML = windows.map((win, i) => {
                 const isActive = i === currentWindow;
                 const hasUpdate = windowData[i]?.hasUpdate && !isActive;
+                const hasPending = pendingWindows[win.index];
+                // Show last directory component from path, or window name as fallback
+                const dirName = win.path ? win.path.split('/').pop() || win.name : win.name;
                 return `
-                    <button class="tab ${isActive ? 'active' : ''} ${hasUpdate ? 'has-update' : ''}"
+                    <button class="tab ${isActive ? 'active' : ''} ${hasUpdate ? 'has-update' : ''} ${hasPending ? 'has-pending-event' : ''}"
                             onclick="switchWindow(${i})">
                         <span class="indicator"></span>
-                        W${win.index}: ${win.name}
+                        W${win.index}: ${dirName}
                     </button>
                 `;
             }).join('');
@@ -621,6 +815,193 @@ create_html_viewer() {
             allowNavigation = true;
             history.back();
         }
+
+        // ========== Remote Response Feature ==========
+        let pendingEvent = null;
+        let pendingWindows = {}; // Track which windows have pending events
+
+        function getPendingEventUrl(winIndex) {
+            return '/pending-event-W' + winIndex + '.json?t=' + Date.now();
+        }
+
+        async function checkAllPendingEvents() {
+            // Check all known windows for pending events
+            for (const win of windows) {
+                try {
+                    const response = await fetch(getPendingEventUrl(win.index));
+                    if (response.ok) {
+                        pendingWindows[win.index] = true;
+                    } else {
+                        pendingWindows[win.index] = false;
+                    }
+                } catch (e) {
+                    pendingWindows[win.index] = false;
+                }
+            }
+            // Re-render tabs to show pending states
+            renderTabs();
+            // Update current window's state
+            await checkPendingEvent();
+        }
+
+        async function checkPendingEvent() {
+            try {
+                const response = await fetch(getPendingEventUrl(currentWindow));
+                if (response.ok) {
+                    const event = await response.json();
+                    if (!pendingEvent || pendingEvent.id !== event.id) {
+                        pendingEvent = event;
+                        document.getElementById('pending-indicator').classList.add('visible');
+                        document.getElementById('respondBtn').classList.add('has-pending');
+                    }
+                } else if (response.status === 404) {
+                    pendingEvent = null;
+                    document.getElementById('pending-indicator').classList.remove('visible');
+                    document.getElementById('respondBtn').classList.remove('has-pending');
+                }
+            } catch (e) {
+                // Ignore fetch errors (file may not exist)
+            }
+        }
+
+        async function toggleResponseModal() {
+            const modal = document.getElementById('response-modal');
+            if (modal.classList.contains('visible')) {
+                dismissResponseModal();
+                return;
+            }
+
+            // Always fetch fresh when button is tapped
+            try {
+                const response = await fetch(getPendingEventUrl(currentWindow));
+                if (response.ok) {
+                    pendingEvent = await response.json();
+                    document.getElementById('respondBtn').classList.add('has-pending');
+                    showResponseModal();
+                } else {
+                    pendingEvent = null;
+                    document.getElementById('respondBtn').classList.remove('has-pending');
+                    alert('No pending question or permission request for this window');
+                }
+            } catch (e) {
+                alert('Error checking for events: ' + e.message);
+            }
+        }
+
+        async function showResponseModal() {
+            if (!pendingEvent) return;
+
+            const modal = document.getElementById('response-modal');
+            const title = document.getElementById('response-modal-title');
+            const project = document.getElementById('response-modal-project');
+            const question = document.getElementById('response-modal-question');
+            const context = document.getElementById('response-modal-context');
+            const options = document.getElementById('response-modal-options');
+            const customInput = document.getElementById('custom-response');
+
+            // Fetch last lines of terminal for context
+            const winIdx = pendingEvent.tmux?.window || currentWindow;
+            try {
+                const logResp = await fetch('/window-' + winIdx + '.log?t=' + Date.now());
+                if (logResp.ok) {
+                    const logText = await logResp.text();
+                    const lines = logText.trim().split('\n');
+                    const lastLines = lines.slice(-15).join('\n');
+                    context.textContent = lastLines;
+                } else {
+                    context.textContent = '(unable to load context)';
+                }
+            } catch (e) {
+                context.textContent = '(unable to load context)';
+            }
+
+            // Set title based on event type
+            if (pendingEvent.event_type === 'permission_prompt') {
+                title.textContent = 'Permission Needed';
+            } else if (pendingEvent.event_type === 'idle_prompt') {
+                title.textContent = 'Input Needed';
+            } else {
+                title.textContent = 'Question';
+            }
+
+            // Set project info
+            project.textContent = (pendingEvent.project || 'Unknown') + ' \u2022 Window ' + (pendingEvent.tmux?.window || '0');
+
+            // Set question/message text
+            question.textContent = pendingEvent.question || pendingEvent.message || 'Response needed';
+
+            // Build option buttons
+            const eventOptions = pendingEvent.options || [];
+            if (eventOptions.length > 0) {
+                options.innerHTML = eventOptions.map(function(opt) {
+                    const escaped = String(opt).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    return '<button class="option-btn" onclick="sendResponse(\'' + escaped + '\')">' + escapeHtml(String(opt)) + '</button>';
+                }).join('');
+                options.style.display = 'flex';
+            } else {
+                // No options - hide the options section, focus on text input
+                options.innerHTML = '';
+                options.style.display = 'none';
+            }
+
+            // Clear custom input and focus it for text input scenarios
+            customInput.value = '';
+
+            modal.classList.add('visible');
+
+            // Focus text input when no options (idle_prompt)
+            if (eventOptions.length === 0) {
+                setTimeout(function() { customInput.focus(); }, 100);
+            }
+        }
+
+        function dismissResponseModal() {
+            document.getElementById('response-modal').classList.remove('visible');
+        }
+
+        async function sendResponse(responseText) {
+            if (!pendingEvent) return;
+
+            const modal = document.getElementById('response-modal');
+
+            try {
+                const response = await fetch('/respond', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        response: responseText,
+                        event_id: pendingEvent.id,
+                        session: pendingEvent.tmux?.session || 'mobile',
+                        window: pendingEvent.tmux?.window || '0',
+                        pane: pendingEvent.tmux?.pane || ''
+                    })
+                });
+
+                if (response.ok) {
+                    modal.classList.remove('visible');
+                    document.getElementById('pending-indicator').classList.remove('visible');
+                    document.getElementById('respondBtn').classList.remove('has-pending');
+                    pendingEvent = null;
+                } else {
+                    const err = await response.json().catch(function() { return {}; });
+                    alert('Failed to send response: ' + (err.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Failed to send response: ' + e.message);
+            }
+        }
+
+        function sendCustomResponse() {
+            const customInput = document.getElementById('custom-response');
+            const text = customInput.value.trim();
+            if (text) {
+                sendResponse(text);
+            }
+        }
+
+        // Start polling for pending events (every 2 seconds)
+        setInterval(checkAllPendingEvents, 2000);
+        checkAllPendingEvents(); // Initial check
     </script>
 </body>
 </html>
@@ -656,13 +1037,78 @@ class VibeGoHandler(SimpleHTTPRequestHandler):
                 error_msg = result.stderr.strip() if result.stderr else 'Screenshot failed'
                 if 'could not create image' in error_msg.lower():
                     error_msg = 'Screen Recording permission needed. Grant in System Settings > Privacy > Screen Recording'
-                self.send_response(500)
+                self._send_json_error(500, error_msg)
+
+        elif self.path == '/respond':
+            # Handle remote response to Claude Code questions/permissions
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+
+            try:
+                data = json.loads(body)
+                response_text = data.get('response', '')
+                event_id = data.get('event_id', '')
+                pane = data.get('pane', '')
+                session = data.get('session', 'mobile')
+                window = data.get('window', '0')
+
+                if not response_text:
+                    self._send_json_error(400, 'Missing response')
+                    return
+
+                # Build tmux target
+                if pane and pane.startswith('%'):
+                    target = f'-t {pane}'
+                else:
+                    target = f'-t {session}:{window}'
+
+                # Escape for tmux send-keys
+                escaped = (response_text
+                    .replace('\\', '\\\\')
+                    .replace('"', '\\"')
+                    .replace('$', '\\$')
+                    .replace('`', '\\`')
+                    .replace('!', '\\!'))
+
+                # Send response to tmux
+                result = subprocess.run(f'tmux send-keys {target} "{escaped}"',
+                                       shell=True, capture_output=True, text=True)
+                if result.returncode != 0:
+                    self._send_json_error(500, f'tmux error: {result.stderr}')
+                    return
+
+                # Send Enter key
+                subprocess.run(f'tmux send-keys {target} Enter', shell=True)
+
+                # Delete pending event file if ID matches
+                event_file = os.path.join(os.getcwd(), f'pending-event-W{window}.json')
+                if os.path.exists(event_file):
+                    try:
+                        with open(event_file) as f:
+                            pending = json.load(f)
+                        if pending.get('id') == event_id:
+                            os.remove(event_file)
+                    except: pass
+
+                self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({'error': error_msg}).encode())
+                self.wfile.write(json.dumps({'success': True}).encode())
+
+            except json.JSONDecodeError:
+                self._send_json_error(400, 'Invalid JSON')
+            except Exception as e:
+                self._send_json_error(500, str(e))
+
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _send_json_error(self, code, message):
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({'error': message}).encode())
 
     def log_message(self, format, *args):
         pass  # Suppress logging
@@ -679,8 +1125,8 @@ update_windows_json() {
     local windows_json="$LOG_DIR/windows.json"
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
-        # Get window list
-        local windows=$(tmux list-windows -t "$SESSION" -F '{"index":#{window_index},"name":"#{window_name}","active":#{window_active}}' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+        # Get window list with pane current path
+        local windows=$(tmux list-windows -t "$SESSION" -F '{"index":#{window_index},"name":"#{window_name}","active":#{window_active},"path":"#{pane_current_path}"}' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
         echo "{\"windows\":[${windows}],\"session\":\"${SESSION}\"}" > "$windows_json"
     else
         echo '{"windows":[],"session":"'$SESSION'","error":"no session"}' > "$windows_json"
