@@ -135,6 +135,31 @@ jj-reconcile
 
 See [docs/jj-workflow.md](docs/jj-workflow.md) for full documentation.
 
+## Web Viewer (Optional)
+
+Stream your terminal to your phone browser - no SSH app required!
+
+```bash
+# Start the web viewer
+./scripts/web-viewer.sh start
+
+# Opens at: http://<your-ip>:8765/viewer.html
+```
+
+Features:
+- Live terminal output with auto-refresh
+- Auto-scroll (toggleable)
+- Mobile-optimized dark theme
+- Works in any phone browser
+
+Commands:
+| Command | Description |
+|---------|-------------|
+| `web-viewer.sh start` | Start capture + server |
+| `web-viewer.sh stop` | Stop everything |
+| `web-viewer.sh status` | Show URL and status |
+| `vibego-web` | Shortcut (after sourcing helpers) |
+
 ## Auto-Responder (Optional)
 
 Run an LLM agent that automatically responds to Claude Code prompts:
