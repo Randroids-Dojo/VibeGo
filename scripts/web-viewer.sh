@@ -170,6 +170,42 @@ create_html_viewer() {
             color: #666;
         }
         .empty-state p { margin: 10px 0; }
+        /* Screenshot Modal */
+        #screenshot-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #screenshot-modal.visible { display: flex; }
+        #screenshot-modal img {
+            max-width: 95%;
+            max-height: 80%;
+            object-fit: contain;
+            border: 2px solid #0f3460;
+            border-radius: 8px;
+        }
+        #screenshot-modal .close-btn {
+            position: absolute;
+            top: 20px; right: 20px;
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #screenshot-modal .info {
+            color: #666;
+            margin-top: 15px;
+            font-size: 11px;
+        }
+        #screenshot-loading { color: #53bf9d; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -191,6 +227,13 @@ create_html_viewer() {
         <button id="autoScrollBtn" class="active" onclick="toggleAutoScroll()">Auto</button>
         <button onclick="clearTerminal()">Clear</button>
         <button onclick="refreshWindows()">Refresh</button>
+        <button onclick="takeScreenshot()">Screen</button>
+    </div>
+    <div id="screenshot-modal">
+        <button class="close-btn" onclick="closeScreenshot()">Close</button>
+        <div id="screenshot-loading">Taking screenshot...</div>
+        <img id="screenshot-img" style="display:none" onclick="closeScreenshot()">
+        <div class="info">Tap image or Close to dismiss</div>
     </div>
 
     <script>
@@ -395,10 +438,90 @@ create_html_viewer() {
         // Poll for updates
         setInterval(fetchAllLogs, 1000);
         setInterval(fetchWindows, 5000);  // Refresh window list less frequently
+
+        async function takeScreenshot() {
+            const modal = document.getElementById('screenshot-modal');
+            const loading = document.getElementById('screenshot-loading');
+            const img = document.getElementById('screenshot-img');
+
+            modal.classList.add('visible');
+            loading.style.display = 'block';
+            img.style.display = 'none';
+
+            try {
+                const response = await fetch('/screenshot', { method: 'POST' });
+                if (response.ok) {
+                    const data = await response.json();
+                    img.src = '/' + data.file + '?t=' + Date.now();
+                    img.onload = function() {
+                        loading.style.display = 'none';
+                        img.style.display = 'block';
+                    };
+                } else {
+                    const err = await response.json().catch(() => ({}));
+                    alert(err.error || 'Screenshot failed');
+                    modal.classList.remove('visible');
+                }
+            } catch (e) {
+                alert('Screenshot failed: ' + e.message);
+                modal.classList.remove('visible');
+            }
+        }
+
+        function closeScreenshot() {
+            document.getElementById('screenshot-modal').classList.remove('visible');
+        }
     </script>
 </body>
 </html>
 HTMLEOF
+}
+
+create_python_server() {
+    cat > "$LOG_DIR/server.py" << 'PYEOF'
+#!/usr/bin/env python3
+import os, subprocess, time, glob, json
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+class VibeGoHandler(SimpleHTTPRequestHandler):
+    def do_POST(self):
+        if self.path == '/screenshot':
+            timestamp = int(time.time() * 1000)
+            filename = f'screenshot-{timestamp}.png'
+            filepath = os.path.join(os.getcwd(), filename)
+
+            result = subprocess.run(['screencapture', '-x', filepath], capture_output=True, text=True)
+
+            if result.returncode == 0 and os.path.exists(filepath):
+                # Cleanup old screenshots (keep last 5)
+                for old in sorted(glob.glob('screenshot-*.png'), reverse=True)[5:]:
+                    try: os.remove(old)
+                    except: pass
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'file': filename}).encode())
+            else:
+                error_msg = result.stderr.strip() if result.stderr else 'Screenshot failed'
+                if 'could not create image' in error_msg.lower():
+                    error_msg = 'Screen Recording permission needed. Grant in System Settings > Privacy > Screen Recording'
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': error_msg}).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass  # Suppress logging
+
+if __name__ == '__main__':
+    PORT = int(os.environ.get('VIBEGO_WEB_PORT', '8765'))
+    server = HTTPServer(('0.0.0.0', PORT), VibeGoHandler)
+    server.serve_forever()
+PYEOF
 }
 
 update_windows_json() {
@@ -465,6 +588,7 @@ stop_capture() {
 start_server() {
     mkdir -p "$LOG_DIR"
     create_html_viewer
+    create_python_server
 
     if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
         echo -e "${YELLOW}Web server already running${RESET}"
@@ -472,7 +596,7 @@ start_server() {
     fi
 
     cd "$LOG_DIR"
-    python3 -m http.server "$PORT" --bind 0.0.0.0 > /dev/null 2>&1 &
+    python3 server.py > /dev/null 2>&1 &
     echo $! > "$PID_FILE"
 
     local ip=$(get_local_ip)
