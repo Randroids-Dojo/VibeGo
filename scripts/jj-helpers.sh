@@ -218,7 +218,34 @@ jj-help() {
     echo "  jj squash                Squash current change into parent"
 }
 
+# ============================================================
+# WEB VIEWER HELPERS
+# ============================================================
+
+# Start web viewer for phone monitoring
+vibego-web() {
+    local script_dir="${VIBEGO_DIR:-$HOME/.local/bin}"
+    local script="$script_dir/web-viewer.sh"
+
+    if [[ ! -f "$script" ]]; then
+        script="$(dirname "${BASH_SOURCE[0]}")/web-viewer.sh"
+    fi
+
+    if [[ -f "$script" ]]; then
+        "$script" "${1:-status}"
+    else
+        echo "Error: web-viewer.sh not found"
+        echo "Run VibeGo setup.sh to install"
+    fi
+}
+
+# Quick alias to get the viewer URL
+vibego-url() {
+    local ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "localhost")
+    echo "http://${ip}:${VIBEGO_WEB_PORT:-8765}/viewer.html"
+}
+
 # Print message when sourced
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    echo "VibeGo jj helpers loaded. Run 'jj-help' for commands."
+    echo "VibeGo helpers loaded. Run 'jj-help' or 'vibego-web' for commands."
 fi
