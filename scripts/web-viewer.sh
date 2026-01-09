@@ -28,7 +28,7 @@ create_html_viewer() {
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>VibeGo Terminal</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -110,8 +110,9 @@ create_html_viewer() {
         }
         #terminal-container {
             margin-top: 85px;
-            margin-bottom: 55px;
+            margin-bottom: 65px;
             padding: 10px;
+            padding-bottom: 20px;
         }
         #terminal {
             white-space: pre-wrap;
@@ -125,10 +126,12 @@ create_html_viewer() {
             right: 0;
             background: #16213e;
             padding: 10px;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
             display: flex;
             gap: 8px;
             justify-content: center;
             border-top: 1px solid #0f3460;
+            z-index: 101;
         }
         button {
             background: #0f3460;
