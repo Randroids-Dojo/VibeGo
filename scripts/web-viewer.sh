@@ -207,8 +207,9 @@ create_html_viewer() {
 
         function clearTerminal() {
             document.getElementById('terminal').textContent = '';
+            // Remember current length so we only show new content after this point
             if (windowData[currentWindow]) {
-                windowData[currentWindow].cleared = true;
+                windowData[currentWindow].clearedAtLength = windowData[currentWindow].content?.length || 0;
             }
         }
 
@@ -245,6 +246,11 @@ create_html_viewer() {
                 }
             });
 
+            // Reset cleared state when switching windows (show full history)
+            if (windowData[windowIndex]) {
+                windowData[windowIndex].clearedAtLength = 0;
+            }
+
             // Show window content
             renderCurrentWindow();
             updateStatus(true);
@@ -259,7 +265,17 @@ create_html_viewer() {
                 return;
             }
 
-            terminal.innerHTML = colorize(data.content);
+            // If cleared, only show content after the clear point
+            let content = data.content;
+            if (data.clearedAtLength && data.clearedAtLength > 0) {
+                content = data.content.substring(data.clearedAtLength);
+                if (!content.trim()) {
+                    terminal.innerHTML = '<div class="empty-state"><p>Cleared</p><p class="dim">Waiting for new output...</p></div>';
+                    return;
+                }
+            }
+
+            terminal.innerHTML = colorize(content);
 
             if (autoScroll) {
                 window.scrollTo(0, document.body.scrollHeight);
@@ -390,53 +406,34 @@ start_capture() {
     # Stop any existing captures
     stop_capture 2>/dev/null || true
 
-    # Get all windows and start capturing each
-    local windows=$(tmux list-windows -t "$SESSION" -F '#{window_index}' 2>/dev/null)
-
-    for win_idx in $windows; do
-        local log_file="$LOG_DIR/window-${win_idx}.log"
-        > "$log_file"  # Clear log
-
-        # Capture with perl filtering for ANSI codes and control sequences
-        tmux pipe-pane -t "${SESSION}:${win_idx}" -o \
-            "perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\e\][^\a]*\a//g; s/\e[()][AB012]//g; s/\e\[[\?0-9;]*[hl]//g; s/\r//g; s/[\x00-\x08\x0b\x0c\x0e-\x1f]//g' >> '$log_file'"
-        echo -e "${GREEN}Capturing window $win_idx → window-${win_idx}.log${RESET}"
-    done
-
     # Create initial windows.json
     update_windows_json
 
-    # Start background process to update windows.json periodically
+    # Start background process that captures screen state periodically
+    # Using capture-pane instead of pipe-pane for TUI compatibility
     (
         while true; do
-            sleep 2
             update_windows_json
 
-            # Also start capturing any new windows
+            # Capture current screen state of each window
             local current_windows=$(tmux list-windows -t "$SESSION" -F '#{window_index}' 2>/dev/null)
             for win_idx in $current_windows; do
                 local log_file="$LOG_DIR/window-${win_idx}.log"
-                if [[ ! -f "$log_file" ]]; then
-                    > "$log_file"
-                    tmux pipe-pane -t "${SESSION}:${win_idx}" -o \
-                        "perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\e\][^\a]*\a//g; s/\e[()][AB012]//g; s/\e\[[\?0-9;]*[hl]//g; s/\r//g; s/[\x00-\x08\x0b\x0c\x0e-\x1f]//g' >> '$log_file'"
-                fi
+                # Capture visible pane content plus scrollback (-S -1000 gets last 1000 lines)
+                tmux capture-pane -t "${SESSION}:${win_idx}" -p -S -500 2>/dev/null | \
+                    perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g; s/\e\][^\a]*\a//g; s/\r//g' > "$log_file"
             done
+
+            sleep 1
         done
     ) &
     echo $! > "$LOG_DIR/updater.pid"
+
+    echo -e "${GREEN}Started screen capture for all windows${RESET}"
 }
 
 stop_capture() {
-    # Stop all pipe-panes
-    if tmux has-session -t "$SESSION" 2>/dev/null; then
-        local windows=$(tmux list-windows -t "$SESSION" -F '#{window_index}' 2>/dev/null)
-        for win_idx in $windows; do
-            tmux pipe-pane -t "${SESSION}:${win_idx}" 2>/dev/null || true
-        done
-    fi
-
-    # Stop updater
+    # Stop the background capture process
     if [[ -f "$LOG_DIR/updater.pid" ]]; then
         kill "$(cat "$LOG_DIR/updater.pid")" 2>/dev/null || true
         rm -f "$LOG_DIR/updater.pid"
