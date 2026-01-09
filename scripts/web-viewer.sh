@@ -175,7 +175,9 @@ create_html_viewer() {
         <pre id="terminal"></pre>
     </div>
     <div id="controls">
-        <button id="autoScrollBtn" class="active" onclick="toggleAutoScroll()">Auto-scroll</button>
+        <button onclick="jumpToTop()">Top</button>
+        <button onclick="jumpToBottom()">Bottom</button>
+        <button id="autoScrollBtn" class="active" onclick="toggleAutoScroll()">Auto</button>
         <button onclick="clearTerminal()">Clear</button>
         <button onclick="refreshWindows()">Refresh</button>
     </div>
@@ -191,6 +193,16 @@ create_html_viewer() {
         function toggleAutoScroll() {
             autoScroll = !autoScroll;
             document.getElementById('autoScrollBtn').classList.toggle('active', autoScroll);
+        }
+
+        function jumpToTop() {
+            autoScroll = false;
+            document.getElementById('autoScrollBtn').classList.remove('active');
+            window.scrollTo(0, 0);
+        }
+
+        function jumpToBottom() {
+            window.scrollTo(0, document.body.scrollHeight);
         }
 
         function clearTerminal() {
