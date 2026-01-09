@@ -32,13 +32,14 @@ create_html_viewer() {
     <title>VibeGo Terminal</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
+        html, body {
             background: #1a1a2e;
             color: #eee;
             font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
             font-size: 12px;
             line-height: 1.4;
             overflow-x: hidden;
+            min-height: 100%;
         }
         #header {
             position: fixed;
@@ -113,6 +114,9 @@ create_html_viewer() {
             margin-bottom: 65px;
             padding: 10px;
             padding-bottom: 20px;
+            background: #1a1a2e;
+            position: relative;
+            z-index: 1;
         }
         #terminal {
             white-space: pre-wrap;
@@ -132,6 +136,10 @@ create_html_viewer() {
             justify-content: center;
             border-top: 1px solid #0f3460;
             z-index: 101;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
         }
         button {
             background: #0f3460;
@@ -228,9 +236,18 @@ create_html_viewer() {
             }
         }
 
-        function colorize(text) {
+        function escapeHtml(text) {
             return text
-                .replace(/^(Human:|User:|>)/gm, '<span class="user-msg">$1</span>')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function colorize(text) {
+            // First escape HTML to prevent code in terminal from being parsed
+            text = escapeHtml(text);
+            return text
+                .replace(/^(Human:|User:|&gt;)/gm, '<span class="user-msg">$1</span>')
                 .replace(/^(Assistant:|Claude:)/gm, '<span class="claude-msg">$1</span>')
                 .replace(/(^|\s)(✓|✔|Done|Success)/gm, '$1<span class="claude-msg">$2</span>')
                 .replace(/(✗|✘|Error:|error:|FAILED|Failed)/gi, '<span class="error-msg">$1</span>')
