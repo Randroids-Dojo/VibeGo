@@ -417,6 +417,64 @@ create_html_viewer() {
             background: #e94560 !important;
             animation: pulse-indicator 1.5s infinite;
         }
+        /* Call button */
+        #callBtn {
+            background: #27ae60;
+        }
+        #callBtn:active {
+            background: #2ecc71;
+        }
+        #callBtn.calling {
+            background: #e94560;
+            animation: pulse-indicator 1s infinite;
+        }
+        #callBtn.calling::after {
+            content: '...';
+        }
+        /* Call status modal */
+        #call-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 500;
+            justify-content: center;
+            align-items: center;
+        }
+        #call-modal.visible { display: flex; }
+        #call-modal .modal-content {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 300px;
+            border: 1px solid #27ae60;
+        }
+        #call-modal h3 {
+            color: #27ae60;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        #call-modal p {
+            color: #aaa;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        #call-modal .call-status {
+            color: #53bf9d;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        #call-modal .dismiss-btn {
+            background: #0f3460;
+            color: #aaa;
+            padding: 12px 24px;
+            border-radius: 6px;
+        }
+        .phone-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -438,6 +496,7 @@ create_html_viewer() {
         <button id="autoScrollBtn" class="active" onclick="toggleAutoScroll()">Auto</button>
         <button onclick="clearTerminal()">Clear</button>
         <button id="respondBtn" onclick="toggleResponseModal()">Respond</button>
+        <button id="callBtn" onclick="initiateCall()">Call</button>
         <button onclick="takeScreenshot()">Screen</button>
     </div>
     <div id="screenshot-modal">
@@ -454,6 +513,16 @@ create_html_viewer() {
                 <button class="stay-btn" onclick="stayOnPage()">Stay</button>
                 <button class="leave-btn" onclick="leavePage()">Leave</button>
             </div>
+        </div>
+    </div>
+    <!-- Call Status Modal -->
+    <div id="call-modal">
+        <div class="modal-content">
+            <div class="phone-icon">📞</div>
+            <h3 id="call-modal-title">Calling...</h3>
+            <p id="call-modal-message">Your phone should ring shortly</p>
+            <div class="call-status" id="call-modal-status"></div>
+            <button class="dismiss-btn" onclick="dismissCallModal()">Close</button>
         </div>
     </div>
     <!-- Pending Event Indicator -->
@@ -1002,6 +1071,61 @@ create_html_viewer() {
         // Start polling for pending events (every 2 seconds)
         setInterval(checkAllPendingEvents, 2000);
         checkAllPendingEvents(); // Initial check
+
+        // ========== Call Me Feature ==========
+        async function initiateCall() {
+            const callBtn = document.getElementById('callBtn');
+            const modal = document.getElementById('call-modal');
+            const title = document.getElementById('call-modal-title');
+            const message = document.getElementById('call-modal-message');
+            const status = document.getElementById('call-modal-status');
+
+            // Get the actual tmux window index for the currently viewed window
+            const currentWin = windows[currentWindow];
+            const windowIndex = currentWin ? currentWin.index : currentWindow;
+
+            // Show modal
+            title.textContent = 'Calling...';
+            message.textContent = 'Claude will read terminal context and call you';
+            status.textContent = 'Window: ' + windowIndex;
+            modal.classList.add('visible');
+            callBtn.classList.add('calling');
+            callBtn.textContent = 'Calling';
+
+            try {
+                const response = await fetch('/call-me', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        window: windowIndex,
+                        session: 'mobile'  // Default session name
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    title.textContent = 'Call Started!';
+                    message.textContent = 'Answer your phone - Claude has your terminal context';
+                    status.textContent = 'Hang up when done to send response to terminal';
+                } else {
+                    title.textContent = 'Call Failed';
+                    message.textContent = data.error || 'Could not initiate call';
+                    status.textContent = 'Check that auto-responder is running';
+                }
+            } catch (e) {
+                title.textContent = 'Call Failed';
+                message.textContent = e.message;
+                status.textContent = 'Is the call service running?';
+            }
+
+            callBtn.classList.remove('calling');
+            callBtn.textContent = 'Call';
+        }
+
+        function dismissCallModal() {
+            document.getElementById('call-modal').classList.remove('visible');
+        }
     </script>
 </body>
 </html>
@@ -1011,7 +1135,7 @@ HTMLEOF
 create_python_server() {
     cat > "$LOG_DIR/server.py" << 'PYEOF'
 #!/usr/bin/env python3
-import os, subprocess, time, glob, json
+import os, subprocess, time, glob, json, urllib.request, urllib.error
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 class VibeGoHandler(SimpleHTTPRequestHandler):
@@ -1038,6 +1162,46 @@ class VibeGoHandler(SimpleHTTPRequestHandler):
                 if 'could not create image' in error_msg.lower():
                     error_msg = 'Screen Recording permission needed. Grant in System Settings > Privacy > Screen Recording'
                 self._send_json_error(500, error_msg)
+
+        elif self.path == '/call-me':
+            # Trigger conversation phone call via auto-responder
+            # Passes tmux session/window so Claude can read full context
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+
+            try:
+                data = json.loads(body)
+                window = data.get('window', '0')
+                session = data.get('session', os.environ.get('VIBEGO_TMUX_SESSION', 'mobile'))
+
+                # Forward to call service conversation endpoint on port 3333
+                req_data = json.dumps({
+                    'session': session,
+                    'window': str(window)
+                }).encode('utf-8')
+                req = urllib.request.Request(
+                    'http://localhost:3333/conversation-call',
+                    data=req_data,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        result = json.loads(resp.read().decode('utf-8'))
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(result).encode())
+                except urllib.error.URLError as e:
+                    self._send_json_error(503, f'Call service unavailable: {e.reason}')
+                except Exception as e:
+                    self._send_json_error(500, f'Call failed: {str(e)}')
+
+            except json.JSONDecodeError:
+                self._send_json_error(400, 'Invalid JSON')
+            except Exception as e:
+                self._send_json_error(500, str(e))
 
         elif self.path == '/respond':
             # Handle remote response to Claude Code questions/permissions
