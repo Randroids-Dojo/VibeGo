@@ -1,0 +1,171 @@
+# VibeGo Auto-Responder Configuration
+# Copy to ~/.config/vibego/auto-responder.yaml and customize
+version: "1.0"
+
+# Service settings
+service:
+  socket_path: "/tmp/vibego-responder.sock"
+  log_file: "~/.vibego/logs/auto-responder.log"
+  log_level: "info"  # debug, info, warn, error
+
+# LLM Provider configuration
+llm:
+  # Provider: "claude" | "openai" | "ollama"
+  provider: "claude"
+
+  # Claude API settings
+  claude:
+    api_key_env: "ANTHROPIC_API_KEY"  # Environment variable name
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 500
+
+  # OpenAI API settings
+  openai:
+    api_key_env: "OPENAI_API_KEY"
+    model: "gpt-4o"
+    max_tokens: 500
+
+  # Ollama settings (local)
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3.2"
+
+# Auto-response rules
+rules:
+  # Master switch
+  enabled: true
+
+  # If true, log decisions but don't send responses (for testing)
+  dry_run: false
+
+  # Default action when no rule matches
+  # "auto_respond" | "notify" | "ignore"
+  default_action: "notify"
+
+  # Per-prompt-type rules
+  prompts:
+    # Questions from Claude (AskUserQuestion events)
+    questions:
+      enabled: true
+
+      # Patterns to auto-respond (regex, case-insensitive)
+      auto_respond_patterns:
+        - "Should I proceed\\?"
+        - "Do you want me to continue\\?"
+        - "Is this okay\\?"
+        - "Ready to proceed\\?"
+        - "Shall I (create|continue|proceed).*\\?"
+        - "Would you like me to.*\\?"
+
+      # SAFETY: Patterns to ALWAYS notify user (never auto-respond)
+      # These take precedence over auto_respond_patterns
+      always_notify_patterns:
+        - "delete|remove|drop"
+        - "password|secret|credential|api.?key"
+        - "production|prod"
+        - "push|deploy"
+        - "payment|billing|charge"
+
+      # Default response when auto-responding
+      default_response: "yes"
+
+      # Let LLM decide response content (vs using default_response)
+      use_llm_for_response: true
+
+    # Permission prompts (tool approvals)
+    permissions:
+      enabled: true
+
+      auto_respond_patterns:
+        - "Read file"
+        - "List directory"
+        - "Search|Glob|Grep"
+
+      always_notify_patterns:
+        - "Write|Edit|Create|Delete"
+        - "Bash|Execute"
+        - "git push"
+
+      # Response for permission grants
+      grant_response: "y"
+      deny_response: "n"
+
+    # Idle/completion prompts
+    idle:
+      enabled: false  # Usually just want notification for these
+
+# tmux settings
+tmux:
+  default_session: "mobile"
+  response_delay_ms: 100  # Delay before sending response
+
+# Notification coexistence
+notifications:
+  # Always send ntfy notification regardless of auto-response
+  always_notify: false
+
+  # Only notify when not auto-responding
+  notify_on_skip: true
+
+# Phone call escalation (requires Telnyx account and OpenAI API key)
+callEscalation:
+  # Master switch for call integration
+  enabled: false
+
+  # CallMe configuration (use environment variables for secrets)
+  callme:
+    phoneProvider: "telnyx"
+    phoneAccountSidEnv: "CALLME_PHONE_ACCOUNT_SID"    # Telnyx Connection ID
+    phoneAuthTokenEnv: "CALLME_PHONE_AUTH_TOKEN"      # Telnyx API Key
+    phoneNumberEnv: "CALLME_PHONE_NUMBER"             # Your Telnyx phone number
+    userPhoneNumberEnv: "CALLME_USER_PHONE_NUMBER"    # Where to call you
+    openaiApiKeyEnv: "CALLME_OPENAI_API_KEY"          # For STT/TTS
+    ngrokAuthtokenEnv: "CALLME_NGROK_AUTHTOKEN"       # For webhook tunnel
+    port: 3333
+    ttsVoice: "onyx"  # OpenAI voice: alloy, echo, fable, onyx, nova, shimmer
+    telnyxPublicKeyEnv: "CALLME_TELNYX_PUBLIC_KEY"    # Optional: for signature verification
+
+  # When to escalate to phone call
+  triggers:
+    # After push notification, wait this long before calling (seconds)
+    notificationTimeoutSeconds: 120
+
+    # Patterns that should ALWAYS trigger a call (bypass notification)
+    alwaysCallPatterns:
+      - "error.*critical"
+      - "failed.*production"
+      - "security.*vulnerability"
+
+    # Event types to consider for escalation
+    escalatePermissions: true
+    escalateQuestions: false  # Set to true if you want calls for questions
+    escalateOnIdle: false     # Usually don't need calls for "done" notifications
+
+    # Let LLM decide if situation warrants a call
+    useLlmForEscalation: true
+    llmEscalationPrompt: |
+      Decide if this Claude Code event warrants calling the user on the phone.
+      Call for: critical errors, blocked situations, important decisions.
+      Don't call for: simple confirmations, routine questions, minor issues.
+      Respond with JSON: {"shouldCall": true/false, "reason": "..."}
+
+  # Quiet hours - never call during these times
+  quietHours:
+    enabled: true
+    start: "22:00"
+    end: "08:00"
+    timezone: "America/Los_Angeles"
+    fallback: "notify"  # "notify" or "queue_for_morning"
+
+  # Prevent call spam
+  rateLimiting:
+    minCallIntervalSeconds: 300  # At least 5 min between calls
+    maxCallsPerHour: 3
+
+  # What to say when calling
+  callScripts:
+    greeting: "Hey! Claude Code needs your attention."
+    permissionPrompt: "I need permission to {action}. Should I proceed?"
+    questionPrompt: "I have a question: {question}"
+    errorPrompt: "I encountered an issue: {error}. How should I proceed?"
+    goodbye: "Got it! I'll continue working. Talk soon!"

@@ -1,0 +1,36 @@
+{
+  "name": "vibego-auto-responder",
+  "version": "1.0.0",
+  "description": "Auto-responder service for VibeGo - analyzes Claude Code prompts and responds automatically",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "claude-code",
+    "automation",
+    "tmux",
+    "vibego"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.35.0",
+    "@ngrok/ngrok": "^1.4.1",
+    "openai": "^4.77.0",
+    "ws": "^8.18.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
